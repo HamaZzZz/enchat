@@ -7,6 +7,8 @@ import json
 connected_clients = {}
 # Map user_id -> public key pem string
 client_public_keys = {}
+# Map user_id -> list of missed message dicts while offline
+offline_queues = {}
 
 async def relay_handler(websocket):
     current_user_id = None
@@ -22,6 +24,13 @@ async def relay_handler(websocket):
                 if pub_key:
                     client_public_keys[current_user_id] = pub_key
                 print(f"[Server] User registered: {current_user_id}")
+
+                # Deliver any offline/missed messages immediately upon connection
+                if current_user_id in offline_queues and offline_queues[current_user_id]:
+                    print(f"[Server] Flushing {len(offline_queues[current_user_id])} queued messages to {current_user_id}")
+                    for missed_msg in offline_queues[current_user_id]:
+                        await websocket.send(json.dumps(missed_msg))
+                    offline_queues[current_user_id] = []
 
             elif msg_type == "get_pubkey":
                 target_id = data.get("target_id")
@@ -41,11 +50,16 @@ async def relay_handler(websocket):
             elif msg_type == "message":
                 recipient_id = data.get("to")
                 if recipient_id in connected_clients:
+                    # Recipient is online, send immediately
                     recipient_ws = connected_clients[recipient_id]
                     await recipient_ws.send(json.dumps(data))
                     print(f"[Server] Relayed message from {data.get('from')} to {recipient_id}")
                 else:
-                    print(f"[Server] Recipient {recipient_id} not connected.")
+                    # Recipient is offline, queue the message for later
+                    if recipient_id not in offline_queues:
+                        offline_queues[recipient_id] = []
+                    offline_queues[recipient_id].append(data)
+                    print(f"[Server] Recipient {recipient_id} offline. Message queued.")
 
     except websockets.exceptions.ConnectionClosed:
         pass
@@ -55,7 +69,6 @@ async def relay_handler(websocket):
             print(f"[Server] User disconnected: {current_user_id}")
 
 async def main():
-    # Bind to 0.0.0.0 and use Render's dynamic PORT environment variable (default to 8765 locally)
     port = int(os.environ.get("PORT", 8765))
     async with websockets.serve(relay_handler, "0.0.0.0", port):
         print(f"EnChat Blind Relay Server running on port {port}")
