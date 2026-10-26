@@ -1,6 +1,9 @@
 import asyncio
 import json
+import subprocess
+import shutil
 import websockets
+import os
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import Header, Footer, Static, Input, ListView, ListItem, Label, RichLog
@@ -59,7 +62,7 @@ class EnChatApp(App):
         yield Input(placeholder="Type message or command (/add, /group, /chats, /relay, /nick, /help, /exit)...", id="input-bar")
         yield Footer()
 
-    async def on_mount(self):
+    def on_mount(self):
         self.title = f"EnChat - Secure E2EE Terminal"
         self.sub_title = f"User ID: {self.user_id}"
         self.load_chats_to_sidebar()
@@ -70,45 +73,125 @@ class EnChatApp(App):
             try:
                 async with websockets.connect(self.relay_url) as websocket:
                     self.websocket = websocket
+                    # Czyszczenie starych kluczy po połączeniu z nowym relayem
+                    self.contacts_keys.clear()
 
-                    # Register identity and public key
+                    # Rejestracja tożsamości
                     await websocket.send(json.dumps({
                         "type": "register",
                         "user_id": self.user_id,
                         "public_key": self.config.get_public_bytes().decode("utf-8")
                     }))
 
-                    async for raw_msg in websocket:
-                        data = json.loads(raw_msg)
-                        msg_type = data.get("type")
+                    # Jeśli mamy aktywnego rozmówcę (DM), od razu pobieramy jego klucz publiczny z nowego relaya
+                    if self.active_chat and len(self.active_chat) == 8 and all(c in "0123456789ABCDEFabcdef" for c in self.active_chat):
+                        await websocket.send(json.dumps({
+                            "type": "get_pubkey",
+                            "target_id": self.active_chat
+                        }))
 
-                        if msg_type == "pubkey_response":
-                            target_id = data.get("target_id")
-                            pub_key_pem = data.get("public_key")
-                            if pub_key_pem:
-                                self.contacts_keys[target_id] = pub_key_pem.encode("utf-8")
-                                log = self.query_one("#message-log", RichLog)
-                                target_display = self.config.get_nickname(target_id)
-                                log.write(f"[green]Successfully retrieved public key for {target_display}. You can now chat![/]")
+                    # Jeśli jesteśmy w grupie, dołączamy ponownie do pokoju
+                    if self.active_chat and not (len(self.active_chat) == 8 and all(c in "0123456789ABCDEFabcdef" for c in self.active_chat)):
+                        await websocket.send(json.dumps({
+                            "type": "join_group",
+                            "group": self.active_chat,
+                            "user_id": self.user_id
+                        }))
 
-                        elif msg_type == "message":
-                            sender = data.get("from")
-                            payload = data.get("payload")
-
-                            # Decrypt message using our private key
+                    # Heartbeat keep-alive
+                    async def heartbeat():
+                        while True:
+                            await asyncio.sleep(20)
                             try:
-                                decrypted = self.config.decrypt_message(payload)
+                                await websocket.ping()
                             except Exception:
-                                decrypted = "[Encrypted payload decryption failed]"
+                                break
 
-                            self.config.append_chat_log(sender, sender, decrypted)
-                            if self.active_chat == sender:
-                                log = self.query_one("#message-log", RichLog)
+                    ping_task = asyncio.create_task(heartbeat())
+
+                    try:
+                        async for raw_msg in websocket:
+                            # Obsługa wiadomości z serwera...
+                            data = json.loads(raw_msg)
+                            msg_type = data.get("type")
+
+                            if msg_type == "pubkey_response":
+                                target_id = data.get("target_id")
+                                pub_key_pem = data.get("public_key")
+                                if pub_key_pem:
+                                    self.contacts_keys[target_id] = pub_key_pem.encode("utf-8")
+                                    log = self.query_one("#message-log", RichLog)
+                                    target_display = self.config.get_nickname(target_id)
+                                    log.write(f"[green]Pomyślnie pobrano klucz publiczny dla {target_display}. Możesz pisać![/]")
+
+                            elif msg_type == "message":
+                                if shutil.which("paplay"):
+                                    sound_path = "/usr/share/sounds/freedesktop/stereo/message.oga"
+                                    if not os.path.exists(sound_path):
+                                        sound_path = "/usr/share/sounds/freedesktop/stereo/complete.oga"
+                                    if os.path.exists(sound_path):
+                                        subprocess.Popen(["paplay", sound_path])
+
+                                sender = data.get("from")
+                                payload = data.get("payload")
+
+                                try:
+                                    decrypted = self.config.decrypt_message(payload)
+                                except Exception:
+                                    decrypted = "[Błąd odszyfrowania wiadomości]"
+
+                                self.config.append_chat_log(sender, sender, decrypted)
+                                self.load_chats_to_sidebar()
+
                                 sender_display = self.config.get_nickname(sender)
-                                log.write(f"[bold cyan]{sender_display}[/]: {decrypted}")
+
+                                if shutil.which("notify-send"):
+                                    subprocess.Popen(["notify-send", "EnChat", f"Nowa wiadomość od {sender_display}"])
+
+                                self.notify(f"Nowa wiadomość od {sender_display}!", title="EnChat", severity="information", timeout=3)
+
+                                if self.active_chat == sender:
+                                    log = self.query_one("#message-log", RichLog)
+                                    log.write(f"[bold cyan]{sender_display}[/]: {decrypted}")
+                                else:
+                                    log = self.query_one("#message-log", RichLog)
+                                    log.write(f"[yellow]💬 Nowa wiadomość od {sender_display}! Sprawdź listę czatów.[/]")
+
+                            elif msg_type == "group_message":
+                                group_name = data.get("group")
+                                sender = data.get("from")
+                                payload = data.get("payload")
+
+                                if sender == self.user_id:
+                                    continue
+
+                                if shutil.which("paplay"):
+                                    sound_path = "/usr/share/sounds/freedesktop/stereo/message.oga"
+                                    if os.path.exists(sound_path):
+                                        subprocess.Popen(["paplay", sound_path])
+
+                                self.config.append_chat_log(group_name, sender, payload)
+                                self.load_chats_to_sidebar()
+
+                                sender_display = self.config.get_nickname(sender)
+
+                                if shutil.which("notify-send"):
+                                    subprocess.Popen(["notify-send", f"EnChat [{group_name}]", f"{sender_display}: {payload}"])
+
+                                self.notify(f"[{group_name}] {sender_display}: {payload}", title="EnChat Grupa", severity="information", timeout=3)
+
+                                if self.active_chat == group_name:
+                                    log = self.query_one("#message-log", RichLog)
+                                    log.write(f"[bold cyan]{sender_display}[/]: {payload}")
+                                else:
+                                    log = self.query_one("#message-log", RichLog)
+                                    log.write(f"[yellow]💬 Nowa wiadomość w grupie [bold]{group_name}[/][/]")
+                    finally:
+                        ping_task.cancel()
+
             except Exception as e:
                 log = self.query_one("#message-log", RichLog)
-                log.write(f"[italic red]Connection lost. Retrying in 5s... ({e})[/]")
+                log.write(f"[italic red]Utracono połączenie. Ponawianie za 5s... ({e})[/]")
                 await asyncio.sleep(5)
 
     def load_chats_to_sidebar(self):
@@ -140,7 +223,20 @@ class EnChatApp(App):
                 log = self.query_one("#message-log", RichLog)
                 log.write("[bold red]Error: No active chat selected. Use /add <ID> first.[/]")
                 return
+            is_group = len(self.active_chat) != 8 or not all(c in "0123456789ABCDEFabcdef" for c in self.active_chat)
 
+            if is_group:
+                if self.websocket:
+                    await self.websocket.send(json.dumps({
+                        "type": "group_message",
+                        "group": self.active_chat,
+                        "from": self.user_id,
+                        "payload": text
+                    }))
+                self.config.append_chat_log(self.active_chat, "You", text)
+                log = self.query_one("#message-log", RichLog)
+                log.write(f"[bold green]You[/]: {text}")
+                return
             try:
                 if self.active_chat not in self.contacts_keys:
                     if self.websocket:
@@ -231,10 +327,25 @@ class EnChatApp(App):
             for h in history:
                 sender_display = "You" if h['sender'] == "You" else self.config.get_nickname(h['sender'])
                 log.write(f"[cyan]{sender_display}[/]: {h['message']}")
-        elif cmd == "/group" and len(parts) > 2:
+        elif cmd == "/group" and len(parts) > 1:
             group_name = parts[1]
             self.active_chat = group_name
-            log.write(f"[green]Created/Joined local group: {group_name}[/]")
+            log.write(f"[green]Joined group room: [bold]{group_name}[/][/]")
+
+            # Notify relay server to join this group room
+            if self.websocket:
+                await self.websocket.send(json.dumps({
+                    "type": "join_group",
+                    "group": group_name,
+                    "user_id": self.user_id
+                }))
+
+            history = self.config.get_chat_history(group_name)
+            log.clear()
+            log.write(f"[bold blue]--- Group Chat: {group_name} ---[/]")
+            for h in history:
+                sender_display = "You" if h['sender'] == "You" else self.config.get_nickname(h['sender'])
+                log.write(f"[cyan]{sender_display}[/]: {h['message']}")
         elif cmd == "/relay" and len(parts) > 1:
             target = parts[1].lower()
             if target == "local":
@@ -256,6 +367,17 @@ class EnChatApp(App):
     async def on_list_view_selected(self, event: ListView.Selected):
         if event.item and event.item.name:
             self.active_chat = event.item.name
+
+            # Safely request the public key upon clicking a chat
+            if self.websocket:
+                try:
+                    await self.websocket.send(json.dumps({
+                        "type": "get_pubkey",
+                        "target_id": self.active_chat
+                    }))
+                except Exception:
+                    pass # Ignore if connection is resetting/offline temporarily
+
             log = self.query_one("#message-log", RichLog)
             log.clear()
             target_display = self.config.get_nickname(self.active_chat)

@@ -9,6 +9,8 @@ connected_clients = {}
 client_public_keys = {}
 # Map user_id -> list of missed message dicts while offline
 offline_queues = {}
+# group_name -> set of websockets
+groups = {}
 
 async def relay_handler(websocket):
     current_user_id = None
@@ -61,12 +63,50 @@ async def relay_handler(websocket):
                     offline_queues[recipient_id].append(data)
                     print(f"[Server] Recipient {recipient_id} offline. Message queued.")
 
+            elif msg_type == "join_group":
+                group_name = data.get("group")
+                if group_name:
+                    if group_name not in groups:
+                        groups[group_name] = set()
+                    groups[group_name].add(websocket)
+                    print(f"[Server] User joined group: {group_name}")
+
+            elif msg_type == "group_message":
+                group_name = data.get("group")
+                sender = data.get("from")
+                payload = data.get("payload")
+
+                # Broadcast to all other members in the group room
+                if group_name in groups:
+                    disconnected = set()
+                    for client_ws in groups[group_name]:
+                        if client_ws != websocket:  # Don't echo back to sender
+                            try:
+                                await client_ws.send(json.dumps({
+                                    "type": "group_message",
+                                    "group": group_name,
+                                    "from": sender,
+                                    "payload": payload
+                                }))
+                            except Exception:
+                                disconnected.add(client_ws)
+                    # Clean up dead connections
+                    for client_ws in disconnected:
+                        groups[group_name].remove(client_ws)
+                    print(f"[Server] Relayed group message in {group_name} from {sender}")
+
     except websockets.exceptions.ConnectionClosed:
         pass
     finally:
         if current_user_id and current_user_id in connected_clients:
-            del connected_clients[current_user_id]
-            print(f"[Server] User disconnected: {current_user_id}")
+            if connected_clients[current_user_id] == websocket:
+                del connected_clients[current_user_id]
+                print(f"[Server] User disconnected: {current_user_id}")
+
+        # Clean up from group rooms
+        for g_name in list(groups.keys()):
+            if websocket in groups[g_name]:
+                groups[g_name].remove(websocket)
 
 async def main():
     port = int(os.environ.get("PORT", 8765))

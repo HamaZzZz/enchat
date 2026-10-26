@@ -80,7 +80,7 @@ class EnChatConfig:
             user_id = hashlib.sha256(pub_bytes).hexdigest()[:8].upper()
             config_data = {
                 "user_id": user_id,
-                "relay_url": "ws://localhost:8765",
+                "relay_url": "wss://enchat-relay.onrender.com",
                 "nicknames": {}
             }
             with open(self.CONFIG_FILE, "w") as f:
