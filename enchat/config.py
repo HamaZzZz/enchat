@@ -20,6 +20,38 @@ class EnChatConfig:
         self.init_keys()
         self.init_config()
 
+    def export_profile(self, export_path: str = "enchat_backup.json"):
+        """Exports the entire profile (private key, public key, config) into a single JSON backup file."""
+        backup_data = {
+            "user_id": self.get_user_id(),
+            "config": self.load_config(),
+            "private_pem": self.PRIVATE_KEY_FILE.read_text(encoding="utf-8") if self.PRIVATE_KEY_FILE.exists() else "",
+            "public_pem": self.PUBLIC_KEY_FILE.read_text(encoding="utf-8") if self.PUBLIC_KEY_FILE.exists() else ""
+        }
+        with open(export_path, "w", encoding="utf-8") as f:
+            json.dump(backup_data, f, indent=4)
+        return export_path
+
+    def import_profile(self, import_path: str):
+        """Restores a profile from a JSON backup file, overwriting local keys and configuration."""
+        if not os.path.exists(import_path):
+            raise FileNotFoundError(f"Backup file not found: {import_path}")
+
+        with open(import_path, "r", encoding="utf-8") as f:
+            backup_data = json.load(f)
+
+        # Write config
+        with open(self.CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(backup_data.get("config", {}), f, indent=4)
+
+        # Write keys
+        if backup_data.get("private_pem"):
+            self.PRIVATE_KEY_FILE.write_text(backup_data["private_pem"], encoding="utf-8")
+        if backup_data.get("public_pem"):
+            self.PUBLIC_KEY_FILE.write_text(backup_data["public_pem"], encoding="utf-8")
+
+        return True
+
     def init_keys(self):
         if not self.PRIVATE_KEY_FILE.exists() or not self.PUBLIC_KEY_FILE.exists():
             private_key = rsa.generate_private_key(

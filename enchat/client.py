@@ -181,6 +181,21 @@ class EnChatApp(App):
         elif cmd == "/chats":
             self.load_chats_to_sidebar()
             log.write("[yellow]Refreshed chat list in sidebar.[/]")
+        elif cmd == "/export":
+            filename = parts[1] if len(parts) > 1 else "enchat_backup.json"
+            try:
+                path = self.config.export_profile(filename)
+                log.write(f"[green]Successfully exported account backup to: [bold]{path}[/][/]")
+            except Exception as e:
+                log.write(f"[red]Export failed: {e}[/]")
+
+        elif cmd == "/import" and len(parts) > 1:
+            filename = parts[1]
+            try:
+                self.config.import_profile(filename)
+                log.write(f"[green]Successfully imported profile from {filename}! Restart EnChat to apply changes.[/]")
+            except Exception as e:
+                log.write(f"[red]Import failed: {e}[/]")
         elif cmd == "/nick" and len(parts) > 2:
             target_id = parts[1].upper()
             nickname = parts[2]
@@ -194,6 +209,8 @@ class EnChatApp(App):
             log.write("[cyan]/chats[/]: Refresh the chat list in the sidebar.")
             log.write("[cyan]/group <NAME>[/]: Create or join a local group chat.")
             log.write("[cyan]/relay <local|cloud|url>[/]: Switch between local server, cloud relay, or custom URL on the fly.")
+            log.write("[cyan]/export [filename][/]: Export your account and keys to a backup file.")
+            log.write("[cyan]/import <filename>[/]: Import an account backup file.")
             log.write("[cyan]/help[/]: Display this help menu.")
             log.write("[cyan]/exit[/]: Quit EnChat.")
         elif cmd == "/add" and len(parts) > 1:
