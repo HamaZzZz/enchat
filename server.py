@@ -52,12 +52,10 @@ async def relay_handler(websocket):
             elif msg_type == "message":
                 recipient_id = data.get("to")
                 if recipient_id in connected_clients:
-                    # Recipient is online, send immediately
                     recipient_ws = connected_clients[recipient_id]
                     await recipient_ws.send(json.dumps(data))
                     print(f"[Server] Relayed message from {data.get('from')} to {recipient_id}")
                 else:
-                    # Recipient is offline, queue the message for later
                     if recipient_id not in offline_queues:
                         offline_queues[recipient_id] = []
                     offline_queues[recipient_id].append(data)
@@ -71,7 +69,7 @@ async def relay_handler(websocket):
                     groups[group_name].add(websocket)
                     print(f"[Server] User joined group: {group_name}")
 
-           elif msg_type == "group_message":
+            elif msg_type == "group_message":
                 group_name = data.get("group")
                 sender = data.get("from")
                 payload = data.get("payload")
