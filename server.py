@@ -71,10 +71,11 @@ async def relay_handler(websocket):
                     groups[group_name].add(websocket)
                     print(f"[Server] User joined group: {group_name}")
 
-            elif msg_type == "group_message":
+           elif msg_type == "group_message":
                 group_name = data.get("group")
                 sender = data.get("from")
                 payload = data.get("payload")
+                g_name_meta = data.get("group_name")
 
                 # Broadcast to all other members in the group room
                 if group_name in groups:
@@ -86,7 +87,8 @@ async def relay_handler(websocket):
                                     "type": "group_message",
                                     "group": group_name,
                                     "from": sender,
-                                    "payload": payload
+                                    "payload": payload,
+                                    "group_name": g_name_meta
                                 }))
                             except Exception:
                                 disconnected.add(client_ws)

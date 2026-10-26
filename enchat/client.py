@@ -62,10 +62,23 @@ class EnChatApp(App):
         yield Input(placeholder="Type message or command (/add, /group, /chats, /relay, /nick, /help, /exit)...", id="input-bar")
         yield Footer()
 
-    def on_mount(self):
+    async def on_mount(self):
+        # ... your existing mount code ...
+        self.run_worker(self.connect_to_relay())
         self.title = f"EnChat - Secure E2EE Terminal"
         self.sub_title = f"User ID: {self.user_id}"
         self.load_chats_to_sidebar()
+        self.run_worker(self.connect_to_relay())
+        # Auto-join MAIN channel on startup
+        if not hasattr(self, 'joined_groups'):
+            self.joined_groups = set()
+        self.joined_groups.add("MAIN")
+
+        # Keep temporary session history for MAIN in memory only
+        if not hasattr(self, 'temp_histories'):
+            self.temp_histories = {"MAIN": []}
+
+        # Connect to relay in background
         self.run_worker(self.connect_to_relay())
 
     async def connect_to_relay(self):
@@ -157,13 +170,41 @@ class EnChatApp(App):
                                     log = self.query_one("#message-log", RichLog)
                                     log.write(f"[yellow]💬 Nowa wiadomość od {sender_display}! Sprawdź listę czatów.[/]")
 
-                            elif msg_type == "group_message":
+                            eelif msg_type == "group_message":
                                 group_name = data.get("group")
                                 sender = data.get("from")
                                 payload = data.get("payload")
+                                g_name_meta = data.get("group_name")
+
+                                # Automatically learn and save the group name if shared
+                                if g_name_meta:
+                                    self.config.set_nickname(group_name, f"👥 {g_name_meta}")
+                                    self.load_chats_to_sidebar()
 
                                 if sender == self.user_id:
                                     continue
+
+                                # ... rest of your group message handling ...
+
+                                # --- CHECK IF IT'S THE MAIN CHANNEL ---
+                                if group_name == "MAIN":
+                                    # Store in memory only (temporary)
+                                    if not hasattr(self, 'temp_histories'):
+                                        self.temp_histories = {}
+                                    if "MAIN" not in self.temp_histories:
+                                        self.temp_histories["MAIN"] = []
+
+                                    self.temp_histories["MAIN"].append({"sender": sender, "message": payload})
+
+                                    # Display if currently viewing MAIN (NO notifications or sounds!)
+                                    if self.active_chat == "MAIN":
+                                        sender_display = self.config.get_nickname(sender)
+                                        log = self.query_one("#message-log", RichLog)
+                                        log.write(f"[bold cyan]{sender_display}[/]: {payload}")
+                                    continue
+                                # --------------------------------------
+
+                                # ... standard group message handling for other groups continues below ...
 
                                 if shutil.which("paplay"):
                                     sound_path = "/usr/share/sounds/freedesktop/stereo/message.oga"
@@ -216,6 +257,23 @@ class EnChatApp(App):
         if not text:
             return
 
+        if self.active_chat == "MAIN":
+                if self.websocket:
+                    await self.websocket.send(json.dumps({
+                        "type": "group_message",
+                        "group": "MAIN",
+                        "from": self.user_id,
+                        "payload": text
+                    }))
+
+                if not hasattr(self, 'temp_histories'):
+                    self.temp_histories = {"MAIN": []}
+                self.temp_histories["MAIN"].append({"sender": "You", "message": text})
+
+                log = self.query_one("#message-log", RichLog)
+                log.write(f"[bold green]You[/]: {text}")
+                return
+
         if text.startswith("/"):
             await self.handle_command(text)
         else:
@@ -225,15 +283,27 @@ class EnChatApp(App):
                 return
             is_group = len(self.active_chat) != 8 or not all(c in "0123456789ABCDEFabcdef" for c in self.active_chat)
 
+            # Check if active chat is in our tracked groups list
+            if not hasattr(self, 'joined_groups'):
+                self.joined_groups = set()
+
+            is_group = self.active_chat in self.joined_groups
+
             if is_group:
+                # Extract clean group name without the emoji prefix if present
+                raw_display = self.config.get_nickname(self.active_chat)
+                clean_group_name = raw_display.replace("👥 ", "") if raw_display != self.active_chat else "Group"
+
                 if self.websocket:
                     await self.websocket.send(json.dumps({
                         "type": "group_message",
                         "group": self.active_chat,
                         "from": self.user_id,
-                        "payload": text
+                        "payload": text,
+                        "group_name": clean_group_name
                     }))
                 self.config.append_chat_log(self.active_chat, "You", text)
+                self.load_chats_to_sidebar()
                 log = self.query_one("#message-log", RichLog)
                 log.write(f"[bold green]You[/]: {text}")
                 return
@@ -303,7 +373,8 @@ class EnChatApp(App):
             log.write("[cyan]/add <USER_ID>[/]: Start or switch to a direct chat with a user.")
             log.write("[cyan]/nick <USER_ID> <NAME>[/]: Set a local nickname for a user.")
             log.write("[cyan]/chats[/]: Refresh the chat list in the sidebar.")
-            log.write("[cyan]/group <NAME>[/]: Create or join a local group chat.")
+            log.write("[cyan]/group create <NAME>[/]: Create a new secure group with a random ID.")
+            log.write("[cyan]/group <GROUP_ID>[/]: Join an existing secure group using its unique ID.")
             log.write("[cyan]/relay <local|cloud|url>[/]: Switch between local server, cloud relay, or custom URL on the fly.")
             log.write("[cyan]/export [filename][/]: Export your account and keys to a backup file.")
             log.write("[cyan]/import <filename>[/]: Import an account backup file.")
@@ -328,24 +399,85 @@ class EnChatApp(App):
                 sender_display = "You" if h['sender'] == "You" else self.config.get_nickname(h['sender'])
                 log.write(f"[cyan]{sender_display}[/]: {h['message']}")
         elif cmd == "/group" and len(parts) > 1:
-            group_name = parts[1]
-            self.active_chat = group_name
-            log.write(f"[green]Joined group room: [bold]{group_name}[/][/]")
+            group_arg = parts[1].upper()
 
-            # Notify relay server to join this group room
-            if self.websocket:
-                await self.websocket.send(json.dumps({
-                    "type": "join_group",
-                    "group": group_name,
-                    "user_id": self.user_id
-                }))
+            if group_arg == "MAIN":
+                self.active_chat = "MAIN"
+                if not hasattr(self, 'joined_groups'):
+                    self.joined_groups = set()
+                self.joined_groups.add("MAIN")
 
-            history = self.config.get_chat_history(group_name)
-            log.clear()
-            log.write(f"[bold blue]--- Group Chat: {group_name} ---[/]")
-            for h in history:
-                sender_display = "You" if h['sender'] == "You" else self.config.get_nickname(h['sender'])
-                log.write(f"[cyan]{sender_display}[/]: {h['message']}")
+                if self.websocket:
+                    await self.websocket.send(json.dumps({
+                        "type": "join_group",
+                        "group": "MAIN",
+                        "user_id": self.user_id
+                    }))
+
+                log = self.query_one("#message-log", RichLog)
+                log.clear()
+                log.write(f"[bold blue]--- Global Channel: MAIN (Temporary) ---[/]")
+
+                if not hasattr(self, 'temp_histories'):
+                    self.temp_histories = {"MAIN": []}
+
+                for h in self.temp_histories.get("MAIN", []):
+                    sender_display = "You" if h['sender'] == "You" else self.config.get_nickname(h['sender'])
+                    log.write(f"[cyan]{sender_display}[/]: {h['message']}")
+                return
+            if sub_action == "create" and len(parts) > 2:
+                group_name = " ".join(parts[2:])
+                import secrets
+                group_id = secrets.token_hex(4).upper()  # e.g., "A6A4FE0A"
+
+                self.config.set_nickname(group_id, f"👥 {group_name}")
+                self.active_chat = group_id
+
+                # Track that this active chat is explicitly a group
+                if not hasattr(self, 'joined_groups'):
+                    self.joined_groups = set()
+                self.joined_groups.add(group_id)
+
+                log.write(f"[green]Created secure group '[bold]{group_name}[/]' with ID: [bold cyan]{group_id}[/][/]")
+                log.write(f"[yellow]Share this ID with friends so they can join using: /group {group_id}[/]")
+
+                if self.websocket:
+                    await self.websocket.send(json.dumps({
+                        "type": "join_group",
+                        "group": group_id,
+                        "user_id": self.user_id
+                    }))
+
+                history = self.config.get_chat_history(group_id)
+                log.clear()
+                log.write(f"[bold blue]--- Group: {group_name} ({group_id}) ---[/]")
+                for h in history:
+                    sender_display = "You" if h['sender'] == "You" else self.config.get_nickname(h['sender'])
+                    log.write(f"[cyan]{sender_display}[/]: {h['message']}")
+            else:
+                group_id = parts[1].upper()
+                self.active_chat = group_id
+
+                if not hasattr(self, 'joined_groups'):
+                    self.joined_groups = set()
+                self.joined_groups.add(group_id)
+
+                group_display = self.config.get_nickname(group_id)
+                log.write(f"[green]Joined secure group ID: [bold]{group_id}[/][/]")
+
+                if self.websocket:
+                    await self.websocket.send(json.dumps({
+                        "type": "join_group",
+                        "group": group_id,
+                        "user_id": self.user_id
+                    }))
+
+                history = self.config.get_chat_history(group_id)
+                log.clear()
+                log.write(f"[bold blue]--- Group Chat: {group_display} ---[/]")
+                for h in history:
+                    sender_display = "You" if h['sender'] == "You" else self.config.get_nickname(h['sender'])
+                    log.write(f"[cyan]{sender_display}[/]: {h['message']}")
         elif cmd == "/relay" and len(parts) > 1:
             target = parts[1].lower()
             if target == "local":
