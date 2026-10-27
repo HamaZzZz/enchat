@@ -1,0 +1,19 @@
+{
+    "user_id": "C99D79BD",
+    "config": {
+        "user_id": "C99D79BD",
+        "relay_url": "wss://enchat-relay.onrender.com",
+        "nicknames": {
+            "E4BD899D": "hotel",
+            "872C4BD4": "\ud83d\udc65 Group",
+            "F9521EE7": "\ud83d\udc65 F9521EE7",
+            "AB418059": "\ud83d\udc65 AB418059",
+            "1FA54E03": "\ud83d\udc65 1FA54E03",
+            "3B6059C2": "\ud83d\udc65 test2",
+            "85D70FD6": "\ud83d\udc65 test3",
+            "59B402A9": "acc1"
+        }
+    },
+    "private_pem": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC6d4iRYIvqkMzR\nRrFlPsjb06D+kizzTVgFAOWpRuaazoTueeL3p6BQKLqiWLZYHuUjMMzA88wSMUJr\nZDKr/y2Qi0oXcF1clccFFB0VwZ/FH3ECT0GblXy30FBrJkqN23BDQAVwnF5cIy49\nAZC8LgDnSe0UA2eUywd11fpHGDApW1xOQvKF4SSqzxrp1lq4bjyHZBKIJ2lks+ds\nlLvrkOwOX8uHquAuxR7kLCiMFh11RKarhhPhzbnH3LwEc5JZWz2/yvAdtkrvBtUr\nR2hdPmBoa0/MfAU5RClsfImBOgvU6XkBhqFamDNlsLhzE07huLeJv8DpBho0U5Iy\ni0bv23rRAgMBAAECggEAHcQFE0fj2JQ4Iylzb05gG+Si14sYDS1fNp/tCWJIX5VG\nAmzclAdjKkibelz08V4v2mKTh4hOHuf+yqEvtuXA1/O+5meeelrCbrIbmSR+elDJ\nkRfRHk1KSmwWL58+Ls+aZ8cpgc9u/1WdBPS3WQLITCOF6o2clFOl+OPT1FOCefyr\nX1mxBfqPXX5wJmFOuNnQ+/dxWAMwLSNRy1bwRyHEDAUDRn/eCqdYZNRIeBwY0S4B\njCYvxWvYYFZlbbt+xmsfJZCvI21TooWQwKfjGJrvrQLozLtE7Qtzz6of/8jYfugE\nhr+PAZL8C26FE+3d+6EDLbAaBkJMG9MQajKRQzbZ7QKBgQDlbaSn+0WRaJ1dy/39\nqfPSfule0EiVdJv5XbzGWYyXEDJJML7iCRJMpkripznvxUiikULdys068FXIrjhz\nFQB3OjGgdl06BlHBANshpGKOO8+6c8CS2VDUrnWG7h/As74V2k9ZrMqwBpNYfq0K\nOeGC35hRrQaH/+jipRTzk07/pwKBgQDQEB8qwznQ8E4iC26sf+KBtZidChofeDvp\nOreaQwiu70HxWUR6+18sKFiKxKr0RfvFFGNVplmhHsxg4x3Nbqyluy9OEY3MSjVY\nZlfbmG9L6kuWI3FAylJedljphO4X4Of2Calys90Nj7cZ3Fzj2vekR+59tCwU7Auz\n2ltAD09AxwKBgE7jp7WXQjGgvlPNXBXIRa3As/BFQGAby7IwWEP/8MbU6+Wc3FYO\n9nrix2cuR066EKLNvidTn8Q/dc/ekEyKETHuEbhyWtYj7CKob7EevEDaMjCTsskL\n7q5jGsh9wu9ZHuiWu6hDMSLb7/iC/m9Avdlplw+mplNHXMXqK80hfw2LAoGBAKSm\nzXNS0XMmaD6K24eJIJ/TLLXB49BZntfADsH2IG4HiyDKquXD/Zn9R6xxXHQ42bgp\nnT6PiUh3DffyY4hJ+DijPBlEzPkJFNQjEY4HQLRL8osa+ynxsmNston+F0kwQ4Cy\nPrU13043GAhQGfZ7NxR7lCFILsZT0iL/Ps0gEHDLAoGAF14VkDLqUOMEaQDUfDjj\ntBqfEgYrVCOGroNajpFcUO5NXf9o24wLxyAl0ThT2XPzDER1+/bbs+KKqRBQk7ke\nrUDgDbDt2NXp5NwWC8DJhtKYvdY0yWJQMv+5+pebYtgosz4N/QINLMkaIAzgLOKI\ncBqTfDFnZJvCRVp7p1N+q8M=\n-----END PRIVATE KEY-----\n",
+    "public_pem": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuneIkWCL6pDM0UaxZT7I\n29Og/pIs801YBQDlqUbmms6E7nni96egUCi6oli2WB7lIzDMwPPMEjFCa2Qyq/8t\nkItKF3BdXJXHBRQdFcGfxR9xAk9Bm5V8t9BQayZKjdtwQ0AFcJxeXCMuPQGQvC4A\n50ntFANnlMsHddX6RxgwKVtcTkLyheEkqs8a6dZauG48h2QSiCdpZLPnbJS765Ds\nDl/Lh6rgLsUe5CwojBYddUSmq4YT4c25x9y8BHOSWVs9v8rwHbZK7wbVK0doXT5g\naGtPzHwFOUQpbHyJgToL1Ol5AYahWpgzZbC4cxNO4bi3ib/A6QYaNFOSMotG79t6\n0QIDAQAB\n-----END PUBLIC KEY-----\n"
+}

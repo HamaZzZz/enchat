@@ -90,6 +90,11 @@ class EnChatConfig:
         with open(self.CONFIG_FILE, "r") as f:
             return json.load(f)
 
+    def get_user_id(self) -> str:
+        """Returns the current user's unique ID from the config."""
+        data = self.load_config()
+        return data.get("user_id", "")
+
     def set_relay_url(self, url: str):
         data = self.load_config()
         data["relay_url"] = url

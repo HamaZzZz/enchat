@@ -4,14 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "enchat"
-version = "1.0.0"
-description = "Secure terminal-based end-to-end encrypted chat application"
+version = "0.1.0"
 dependencies = [
-    "textual>=0.40.0",
-    "cryptography>=41.0.0",
-    "websockets>=12.0.0",
+    "textual",
+    "websockets",
+    "cryptography"
 ]
-requires-python = ">=3.8"
 
 [project.scripts]
 enchat = "enchat.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["enchat*"]
